@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { SparkRenderer, SplatMesh, isMobile } from "@sparkjsdev/spark";
+import { SplatMirror, type MirrorConfig } from "./mirror";
 import "./style.css";
 
 type Vec3 = [number, number, number];
@@ -21,6 +22,7 @@ interface SceneConfig {
   /** Axis-aligned box (world space) the camera is kept inside. */
   bounds?: { min: Vec3; max: Vec3 };
   background?: string;
+  mirror?: MirrorConfig;
   viewpoints: Viewpoint[];
 }
 
@@ -134,13 +136,17 @@ function adaptResolution(dt: number) {
     pixelRatio = next;
     renderer.setPixelRatio(pixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight, false);
+    mirror?.resize();
   }
 }
+
+let mirror: SplatMirror | null = null;
 
 // ---------------------------------------------------------------------------
 // Main loop: render only when something changed.
 
 let last = performance.now();
+let settleFrames = 0;
 renderer.setAnimationLoop((now: number) => {
   const dt = now - last;
   last = now;
@@ -155,10 +161,20 @@ renderer.setAnimationLoop((now: number) => {
   }
 
   if (controls.update()) dirty = true;
-  if (!dirty) return;
+  if (dirty) {
+    // Spark re-sorts splats asynchronously after the view changes (and the mirror
+    // has its own sort), so keep drawing a few frames after motion stops.
+    settleFrames = 20;
+  } else if (settleFrames > 0) {
+    settleFrames--;
+  } else {
+    return;
+  }
   dirty = false;
 
   clampCamera();
+  camera.updateMatrixWorld();
+  mirror?.update(scene, camera);
   renderer.render(scene, camera);
   adaptResolution(dt);
 });
@@ -166,6 +182,7 @@ renderer.setAnimationLoop((now: number) => {
 window.addEventListener("resize", () => {
   updateFov();
   renderer.setSize(window.innerWidth, window.innerHeight, false);
+  mirror?.resize();
   requestRender();
 });
 
@@ -249,6 +266,12 @@ async function main() {
   }
   if (config.position) room.position.set(...config.position);
   scene.add(room);
+
+  if (config.mirror) {
+    // The reflection doubles the splat work, so render it at lower resolution on phones.
+    mirror = new SplatMirror(renderer, { quality: mobile ? 0.35 : 0.5, ...config.mirror }, requestRender);
+    scene.add(mirror.mesh);
+  }
 
   await room.initialized;
   barFill.style.width = "100%";
