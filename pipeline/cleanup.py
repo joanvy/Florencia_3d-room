@@ -16,7 +16,9 @@ edits.json (all coordinates in aligned metres, Y up):
   "room": {"min": [x,y,z], "max": [x,y,z]},          # crop; everything outside is dropped
   "keep_outside": [{"min": [...], "max": [...]}],       # e.g. the view through a window
   "remove": [{"name": "suitcase", "min": [...], "max": [...], "fill_floor": true}],
-  "mirror": {"axis": "x", "value": 3.98, "min": [y0, z0], "max": [y1, z1], "mode": "glass"},
+  "mirror": {"axis": "x", "value": 3.98, "min": [y0, z0], "max": [y1, z1], "mode": "reflect"},
+                                                        # reflect: viewer renders a live reflection
+                                                        # glass: bake a flat grey pane instead
   "max_splats": 900000
 }
 """
@@ -144,31 +146,36 @@ def cmd_align(args):
     up = -np.mean([im.R.T @ np.array([0, 1, 0]) for im in images], 0)
     up /= np.linalg.norm(up)
 
-    solid = (s.alpha > 0.5) & (flatness(s) > 1.0)
+    solid = s.alpha > 0.5
     pts = s.xyz[solid]
     span = np.percentile(np.linalg.norm(pts - np.median(pts, 0), axis=1), 90)
     rng = np.random.default_rng(0)
     sample = pts[rng.choice(len(pts), min(len(pts), 60000), replace=False)]
 
-    # Floor = the horizontal plane below the cameras holding most splats.
-    h = sample @ up
-    cam_h = np.median(centers @ up)
-    below = sample[h < cam_h - 0.2 * span]
-    n_floor, d_floor, _ = ransac_plane(below, up, thr=0.01 * span, rng=rng)
+    # Orientation: the dominant horizontal plane (floor, bed top and tables are all parallel).
+    n_floor, _, _ = ransac_plane(sample, up, thr=0.01 * span, rng=rng)
     if n_floor @ up < 0:
-        n_floor, d_floor = -n_floor, -d_floor
-    # Ceiling (optional) = horizontal plane above the cameras.
-    above = sample[h > cam_h + 0.1 * span]
+        n_floor = -n_floor
+    # Heights along that normal: the floor is the lowest strong peak, the ceiling the highest.
+    h = pts @ n_floor
+    bin_w = 0.005 * span
+    hist, edges = np.histogram(h, bins=np.arange(h.min(), h.max() + bin_w, bin_w))
+    hist = np.convolve(hist, np.ones(5) / 5, "same")
+    peaks = [k for k in range(1, len(hist) - 1)
+             if hist[k] >= hist[k - 1] and hist[k] >= hist[k + 1] and hist[k] >= 0.25 * hist.max()]
+    centre = lambda k: (edges[k] + edges[k + 1]) / 2  # noqa: E731
+    floor_h = centre(peaks[0])
+    d_floor = -floor_h
+    cam_h = np.median(centers @ n_floor)
     ceiling_h = None
-    if len(above) > 500:
-        _, _, inl = ransac_plane(above, up, thr=0.01 * span, rng=rng)
-        if inl.sum() > 0.2 * len(above):
-            ceiling_h = float(np.median(above[inl] @ n_floor + d_floor))
+    if centre(peaks[-1]) > cam_h + 0.05 * span:
+        ceiling_h = centre(peaks[-1]) - floor_h
+    print(f"height peaks (rel. floor): {[round(centre(k) - floor_h, 3) for k in peaks]}")
 
     # Rotation taking floor normal -> +Y.
     y = n_floor
     # Wall directions: histogram of horizontal normal angles of vertical flat splats (mod 90 deg).
-    nrm = normals(s)[solid]
+    nrm = normals(s)[solid & (flatness(s) > 1.0)]
     horiz = nrm - np.outer(nrm @ y, y)
     hn = np.linalg.norm(horiz, axis=1)
     vertical = hn > 0.95
@@ -396,7 +403,13 @@ def cmd_apply(args):
         phantom = behind & within
         s = s.subset(~phantom)
         log.append(f"mirror phantom room: {int(phantom.sum())} removed")
-        if mir.get("mode", "glass") == "glass":
+        # Whatever was reconstructed on the glass itself goes too: in "reflect" mode the
+        # viewer draws a live reflection there, and nothing may sit between the
+        # reflected camera and the glass.
+        pane = (np.abs(s.xyz[:, ax] - v) < 0.03) & np.all((s.xyz[:, others] >= lo2) & (s.xyz[:, others] <= hi2), 1)
+        s = s.subset(~pane)
+        log.append(f"mirror pane: {int(pane.sum())} removed")
+        if mir.get("mode", "reflect") == "glass":
             # Replace with a flat, slightly blue-grey reflective-looking pane.
             sp = 0.01
             a = np.arange(lo2[0], hi2[0], sp)
@@ -424,9 +437,7 @@ def cmd_apply(args):
                 scale=np.log(np.tile([sp * 0.9, sp * 0.9, 0.001], (n, 1))).astype(np.float32),
                 rot=np.tile(normal_axis_quat, (n, 1)).astype(np.float32),
             )
-            # Remove the old surface splats in the pane before inserting it.
-            pane = (np.abs(s.xyz[:, ax] - v) < 0.03) & np.all((s.xyz[:, others] >= lo2) & (s.xyz[:, others] <= hi2), 1)
-            s = concat(s.subset(~pane), glass)
+            s = concat(s, glass)
             log.append(f"mirror glass: +{n} splats")
 
     # 5. Budget for phones: drop the least important splats (opacity x footprint).
