@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+    <meta name="theme-color" content="#111111" />
+    <meta name="description" content="Walk around our hotel room in Florence — a 3D Gaussian splat captured on a phone." />
+    <title>Florencia · Hotel Room 3D</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛏️</text></svg>" />
+  </head>
+  <body>
+    <canvas id="view" aria-label="3D view of the hotel room"></canvas>
+
+    <div id="loader" role="status">
+      <div class="loader-box">
+        <div class="loader-title" id="loader-title">Loading the room…</div>
+        <div class="bar"><div class="bar-fill" id="bar-fill"></div></div>
+        <div class="loader-detail" id="loader-detail"></div>
+      </div>
+    </div>
+
+    <header id="hud">
+      <h1 id="title">Hotel Room</h1>
+      <button id="help-btn" class="icon-btn" aria-label="How to move">?</button>
+    </header>
+
+    <nav id="spots" aria-label="Viewpoints"></nav>
+
+    <div id="help" hidden>
+      <div class="help-box">
+        <h2>How to look around</h2>
+        <ul>
+          <li><b>Drag</b> with one finger (or the mouse) to turn the view.</li>
+          <li><b>Pinch</b> (or scroll) to move closer or farther.</li>
+          <li><b>Two fingers</b> (or right-click drag) to slide sideways.</li>
+          <li>Tap a <b>viewpoint</b> button to jump to a spot in the room.</li>
+        </ul>
+        <button id="help-close" class="pill">Got it</button>
+      </div>
+    </div>
+
+    <div id="error" hidden></div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

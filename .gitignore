@@ -1,0 +1,8 @@
+node_modules
+dist
+.vercel
+# heavy pipeline working data (videos, frames, COLMAP db, training checkpoints)
+work/
+*.mp4
+*.mov
+*.MOV

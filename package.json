@@ -1,0 +1,28 @@
+{
+  "name": "florencia-3d-room",
+  "description": "Walk-through 3D Gaussian splat of a hotel room in Florence",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/joanvy/Florencia_3d-room.git"
+  },
+  "bugs": {
+    "url": "https://github.com/joanvy/Florencia_3d-room/issues"
+  },
+  "homepage": "https://github.com/joanvy/Florencia_3d-room#readme",
+  "dependencies": {
+    "@sparkjsdev/spark": "^2.2.0",
+    "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "@types/three": "^0.186.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.1"
+  },
+  "private": true,
+  "type": "module"
+}
